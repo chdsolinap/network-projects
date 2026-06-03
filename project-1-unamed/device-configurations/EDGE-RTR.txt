@@ -1,0 +1,128 @@
+! ============================================================
+! EDGE-RTR — WAN edge router (FINAL)
+! Role: NAT (pool overload), OSPF Area 0 to cores,
+!       dual static defaults to ISPs (interface-state failover)
+! ============================================================
+
+enable
+configure terminal
+
+hostname EDGE-RTR
+no ip domain-lookup
+ip domain name data.com
+
+! ============================================================
+! ===== Step 1: Interfaces =====
+! ============================================================
+
+interface loopback 0
+ description Router-id and management
+ ip address 10.99.0.51 255.255.255.255
+exit
+
+interface g0/0
+ description Link to CORE-1 F0/1
+ ip address 10.99.0.1 255.255.255.252
+ ip ospf network point-to-point
+ ip nat inside
+ no shutdown
+exit
+
+interface g0/1
+ description Link to CORE-2 F0/1
+ ip address 10.99.0.5 255.255.255.252
+ ip ospf network point-to-point
+ ip nat inside
+ no shutdown
+exit
+
+interface g0/0/0
+ description Link to ISP-A G0/0/0 (primary)
+ ip address 203.0.113.2 255.255.255.252
+ ip nat outside
+ no shutdown
+exit
+
+interface g0/1/0
+ description Link to ISP-B G0/0/0 (secondary)
+ ip address 203.0.113.6 255.255.255.252
+ ip nat outside
+ no shutdown
+exit
+
+! ============================================================
+! ===== Step 2: OSPF =====
+! ============================================================
+router ospf 1
+ router-id 10.99.0.51
+ passive-interface loopback 0
+ network 10.99.0.51 0.0.0.0 area 0
+ network 10.99.0.1 0.0.0.0 area 0
+ network 10.99.0.5 0.0.0.0 area 0
+ default-information originate
+exit
+
+! ============================================================
+! ===== Step 3: Default routes (primary + floating backup) =====
+! ============================================================
+ip route 0.0.0.0 0.0.0.0 203.0.113.1
+ip route 0.0.0.0 0.0.0.0 203.0.113.5 5
+
+! ============================================================
+! ===== Step 4: NAT (pool overload) =====
+! ============================================================
+access-list 2 permit 10.1.0.0 0.0.255.255
+access-list 2 permit 10.2.0.0 0.0.255.255
+access-list 2 permit 10.10.0.0 0.0.255.255
+access-list 2 permit 10.20.0.0 0.0.255.255
+
+ip nat pool POOL1 203.0.113.200 203.0.113.207 netmask 255.255.255.248
+ip nat inside source list 2 pool POOL1 overload
+
+! ============================================================
+! ===== Step 5: Logging, NTP, DNS =====
+! ============================================================
+ip name-server 10.10.30.10
+
+logging 10.10.30.10
+logging trap debugging
+logging buffered 8192
+
+ntp authentication-key 1 md5 ccna
+ntp trusted-key 1
+ntp server 10.10.30.20 key 1
+
+no cdp run
+lldp run
+
+! ============================================================
+! ===== Step 6: Auth, SSH, VTY ACL (final hardening) =====
+! ============================================================
+service password-encryption
+enable secret password
+username password privilege 15 secret password
+
+access-list 1 permit 10.10.40.0 0.0.0.63
+access-list 1 deny   any
+
+crypto key generate rsa
+512
+ip ssh version 2
+ip ssh time-out 60
+ip ssh authentication-retries 3
+
+line console 0
+ login local
+ logging synchronous
+ exec-timeout 10 0
+exit
+
+line vty 0 4
+ login local
+ transport input ssh
+ access-class 1 in
+ exec-timeout 10 0
+exit
+
+end
+write memory

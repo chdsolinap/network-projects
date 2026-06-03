@@ -1,0 +1,179 @@
+! ============================================================
+! ACC-F4-1 — Floor 4 access switch (FINAL, representative)
+! Role: L2 access — printers, APs, users
+! ============================================================
+! Port layout (24 ports):
+!   F0/1-3   — Printers in VLAN 50
+!   F0/4     — AP-CORP (VLAN 60)
+!   F0/5     — AP-GUEST (VLAN 70)
+!   F0/6-24  — User access (DATA_F4 + VOICE_F4)
+! ============================================================
+
+enable
+configure terminal
+
+hostname ACC-F4-1
+no ip domain-lookup
+ip domain name data.com
+
+! ===== Step 1: VTP and VLANs =====
+vtp version 2
+vtp mode transparent
+vtp domain-name data.com
+
+vlan 14
+ name DATA_F4
+vlan 24
+ name VOICE_F4
+vlan 40
+ name MGMT
+vlan 50
+ name PRINTERS
+vlan 60
+ name WIFI_CORP
+vlan 70
+ name WIFI_GUEST
+vlan 100
+ name NATIVE
+exit
+
+! ===== Step 2: Spanning Tree =====
+spanning-tree mode rapid-pvst
+
+! ===== Step 3: Uplinks =====
+interface g0/1
+ description Uplink to CORE-1 F0/14
+ switchport mode trunk
+ switchport nonegotiate
+ switchport trunk native vlan 100
+ switchport trunk allowed vlan 14,24,40,50,60,70,100
+ no shutdown
+exit
+
+interface g0/2
+ description Uplink to CORE-2 F0/14
+ switchport mode trunk
+ switchport nonegotiate
+ switchport trunk native vlan 100
+ switchport trunk allowed vlan 14,24,40,50,60,70,100
+ no shutdown
+exit
+
+! ===== Step 4: Printer ports (F0/1-3) =====
+interface range f0/1 - 3
+ description Network printers in VLAN 50
+ switchport mode access
+ switchport access vlan 50
+ switchport nonegotiate
+ spanning-tree portfast
+ spanning-tree bpduguard enable
+ switchport port-security
+ switchport port-security mac-address sticky
+ switchport port-security violation restrict
+ no shutdown
+exit
+
+! ===== Step 5: AP ports =====
+interface f0/4
+ description AP-CORP — WIFI_CORP (VLAN 60)
+ switchport mode access
+ switchport access vlan 60
+ switchport nonegotiate
+ spanning-tree portfast
+ no shutdown
+exit
+
+interface f0/5
+ description AP-GUEST — WIFI_GUEST (VLAN 70)
+ switchport mode access
+ switchport access vlan 70
+ switchport nonegotiate
+ spanning-tree portfast
+ no shutdown
+exit
+
+! ===== Step 6: User access ports (F0/6-24) =====
+interface range f0/6 - 24
+ description User access — DATA_F4 + VOICE_F4
+ switchport mode access
+ switchport nonegotiate
+ switchport access vlan 14
+ switchport voice vlan 24
+ spanning-tree portfast
+ spanning-tree bpduguard enable
+ switchport port-security
+ switchport port-security mac-address sticky
+ switchport port-security violation restrict
+ switchport port-security maximum 3
+ no shutdown
+exit
+
+! ===== Step 7: Errdisable auto-recovery =====
+errdisable recovery cause bpduguard
+errdisable recovery cause psecure-violation
+errdisable recovery interval 300
+
+! ===== Step 8: Management SVI (VLAN 40) =====
+! IP plan: ACC-F4-1 = 10.10.40.33
+interface vlan 40
+ description Management interface
+ ip address 10.10.40.33 255.255.255.192
+ no shutdown
+exit
+
+ip default-gateway 10.10.40.1
+
+! ===== Step 9: Logging, NTP, DNS =====
+ip name-server 10.10.30.10
+
+logging 10.10.30.10
+logging trap debugging
+logging buffered 8192
+
+ntp authentication-key 1 md5 ccna
+ntp trusted-key 1
+ntp server 10.10.30.20 key 1
+
+no cdp run
+lldp run
+
+! ============================================================
+! ===== Step 10: Auth, SSH, VTY ACL (final hardening) =====
+! ============================================================
+service password-encryption
+enable secret password
+username password privilege 15 secret password
+
+access-list 1 permit 10.10.40.0 0.0.0.63
+access-list 1 deny   any
+
+crypto key generate rsa
+512
+ip ssh version 2
+ip ssh time-out 60
+ip ssh authentication-retries 3
+
+line console 0
+ login local
+ logging synchronous
+ exec-timeout 10 0
+exit
+
+line vty 0 15
+ login local
+ transport input ssh
+ access-class 1 in
+ exec-timeout 10 0
+exit
+
+end
+write memory
+
+! ============================================================
+! NOTES FOR ACC-F4-2, ACC-F4-3, ACC-F4-4
+! ============================================================
+! Identical EXCEPT:
+!   hostname:    ACC-F4-2 / ACC-F4-3 / ACC-F4-4
+!   VLAN 40 IP:  10.10.40.34 / .35 / .36
+!   Uplink ports on cores: -2 → F0/15, -3 → F0/16, -4 → F0/17
+! ============================================================

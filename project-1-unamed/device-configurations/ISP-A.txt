@@ -1,0 +1,34 @@
+! ============================================================
+! ISP-A — Simulated upstream provider (primary, FINAL)
+! ============================================================
+! NOTE: ISPs are simulation stubs outside the enterprise admin domain.
+! No internal auth/SSH hardening — only baseline console hygiene.
+! ============================================================
+
+enable
+configure terminal
+
+hostname ISP-A
+no ip domain-lookup
+
+interface g0/0/0
+ description Link to EDGE-RTR G0/0/0
+ ip address 203.0.113.1 255.255.255.252
+ no shutdown
+exit
+
+interface loopback 0
+ description Simulated internet host (ISP-A path)
+ ip address 8.8.8.8 255.255.255.255
+exit
+
+! Return route for the NAT pool (so ping replies can come back)
+ip route 203.0.113.200 255.255.255.248 203.0.113.2
+
+line console 0
+ logging synchronous
+ exec-timeout 30 0
+exit
+
+end
+write memory

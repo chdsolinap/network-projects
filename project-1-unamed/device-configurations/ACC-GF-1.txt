@@ -1,0 +1,204 @@
+! ============================================================
+! ACC-GF-1 — Ground Floor access switch (FINAL)
+! Role: L2 access — servers (this switch only), printers, AP, users
+! ============================================================
+! Port layout (24 ports):
+!   F0/1-2   — Servers in VLAN 30
+!   F0/3-7   — Printers in VLAN 50
+!   F0/8     — AP-CORP (VLAN 60)
+!   F0/9-24  — User access (DATA_GF + VOICE_GF)
+! ============================================================
+
+enable
+configure terminal
+
+hostname ACC-GF-1
+no ip domain-lookup
+ip domain name data.com
+
+! ===== Step 1: VTP and VLANs =====
+vtp version 2
+vtp mode transparent
+vtp domain-name data.com
+
+vlan 11
+ name DATA_GF
+vlan 21
+ name VOICE_GF
+vlan 30
+ name SERVERS
+vlan 40
+ name MGMT
+vlan 50
+ name PRINTERS
+vlan 60
+ name WIFI_CORP
+vlan 70
+ name WIFI_GUEST
+vlan 100
+ name NATIVE
+exit
+
+! ===== Step 2: Spanning Tree =====
+spanning-tree mode rapid-pvst
+
+! ===== Step 3: Uplinks =====
+interface g0/1
+ description Uplink to CORE-1 F0/2
+ switchport mode trunk
+ switchport nonegotiate
+ switchport trunk native vlan 100
+ switchport trunk allowed vlan 11,21,30,40,50,60,70,100
+ no shutdown
+exit
+
+interface g0/2
+ description Uplink to CORE-2 F0/2
+ switchport mode trunk
+ switchport nonegotiate
+ switchport trunk native vlan 100
+ switchport trunk allowed vlan 11,21,30,40,50,60,70,100
+ no shutdown
+exit
+
+! ===== Step 4: Server ports (F0/1-2) =====
+interface range f0/1 - 2
+ description Servers in VLAN 30
+ switchport mode access
+ switchport access vlan 30
+ switchport nonegotiate
+ spanning-tree portfast
+ spanning-tree bpduguard enable
+ switchport port-security
+ switchport port-security mac-address sticky
+ switchport port-security violation restrict
+ switchport port-security maximum 2
+ no shutdown
+exit
+
+! ===== Step 5: Printer ports (F0/3-7) =====
+interface range f0/3 - 7
+ description Network printers in VLAN 50
+ switchport mode access
+ switchport access vlan 50
+ switchport nonegotiate
+ spanning-tree portfast
+ spanning-tree bpduguard enable
+ switchport port-security
+ switchport port-security mac-address sticky
+ switchport port-security violation restrict
+ no shutdown
+exit
+
+! ===== Step 6: AP ports =====
+! NOTE: The PT AP-PT cannot trunk; one AP per SSID per floor.
+! F0/8 = AP-CORP (VLAN 60), F0/9 reassigned to AP-GUEST (VLAN 70).
+! No port-security on AP ports — wireless clients all share the AP MAC,
+! and PortFast/BPDU-guard would falsely trip in some PT versions.
+interface f0/8
+ description AP-CORP — WIFI_CORP (VLAN 60)
+ switchport mode access
+ switchport access vlan 60
+ switchport nonegotiate
+ spanning-tree portfast
+ no shutdown
+exit
+
+interface f0/9
+ description AP-GUEST — WIFI_GUEST (VLAN 70)
+ switchport mode access
+ switchport access vlan 70
+ switchport nonegotiate
+ spanning-tree portfast
+ no shutdown
+exit
+
+! ===== Step 7: User access ports (F0/10-24) =====
+interface range f0/10 - 24
+ description User access — DATA_GF + VOICE_GF
+ switchport mode access
+ switchport nonegotiate
+ switchport access vlan 11
+ switchport voice vlan 21
+ spanning-tree portfast
+ spanning-tree bpduguard enable
+ switchport port-security
+ switchport port-security mac-address sticky
+ switchport port-security violation restrict
+ switchport port-security maximum 3
+ no shutdown
+exit
+
+! ===== Step 8: Errdisable auto-recovery =====
+errdisable recovery cause bpduguard
+errdisable recovery cause psecure-violation
+errdisable recovery interval 300
+
+! ===== Step 9: Management SVI (VLAN 40) =====
+! IP plan: ACC-GF-1 = 10.10.40.21
+interface vlan 40
+ description Management interface
+ ip address 10.10.40.21 255.255.255.192
+ no shutdown
+exit
+
+ip default-gateway 10.10.40.1
+
+! ===== Step 10: Logging, NTP, DNS =====
+ip name-server 10.10.30.10
+
+logging 10.10.30.10
+logging trap debugging
+logging buffered 8192
+
+ntp authentication-key 1 md5 ccna
+ntp trusted-key 1
+ntp server 10.10.30.20 key 1
+
+no cdp run
+lldp run
+
+! ============================================================
+! ===== Step 11: Auth, SSH, VTY ACL (final hardening) =====
+! ============================================================
+service password-encryption
+enable secret password
+username password privilege 15 secret password
+
+access-list 1 permit 10.10.40.0 0.0.0.63
+access-list 1 deny   any
+
+crypto key generate rsa
+512
+ip ssh version 2
+ip ssh time-out 60
+ip ssh authentication-retries 3
+
+line console 0
+ login local
+ logging synchronous
+ exec-timeout 10 0
+exit
+
+line vty 0 15
+ login local
+ transport input ssh
+ access-class 1 in
+ exec-timeout 10 0
+exit
+
+end
+write memory
+
+! ============================================================
+! NOTES FOR ACC-GF-2, ACC-GF-3, ACC-GF-4
+! ============================================================
+! Identical EXCEPT:
+!   hostname:    ACC-GF-2 / ACC-GF-3 / ACC-GF-4
+!   VLAN 40 IP:  10.10.40.22 / .23 / .24
+!   Uplink port descriptions: ACC-GF-2 → CORE-1/2 F0/3,
+!                              ACC-GF-3 → F0/4,
+!                              ACC-GF-4 → F0/5
+!   ACC-GF-2..4 do NOT have server ports.
+!     Convert F0/1-2 to user access ports (same config as F0/10-24).
+! ============================================================

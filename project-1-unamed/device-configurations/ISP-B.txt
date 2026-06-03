@@ -1,0 +1,31 @@
+! ============================================================
+! ISP-B — Simulated upstream provider (secondary / failover, FINAL)
+! ============================================================
+
+enable
+configure terminal
+
+hostname ISP-B
+no ip domain-lookup
+
+interface g0/0/0
+ description Link to EDGE-RTR G0/1/0
+ ip address 203.0.113.5 255.255.255.252
+ no shutdown
+exit
+
+interface loopback 0
+ description Simulated internet host (ISP-B path)
+ ip address 1.1.1.1 255.255.255.255
+exit
+
+! Return route for the NAT pool
+ip route 203.0.113.200 255.255.255.248 203.0.113.6
+
+line console 0
+ logging synchronous
+ exec-timeout 30 0
+exit
+
+end
+write memory

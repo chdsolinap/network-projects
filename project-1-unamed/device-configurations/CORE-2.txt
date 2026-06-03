@@ -1,0 +1,385 @@
+! ============================================================
+! CORE-2 — Collapsed Core L3 switch (FINAL, mirror of CORE-1)
+! Role: HSRP active for EVEN VLANs (12,14,22,24),
+!       HSRP standby for ODD VLANs and shared
+! ============================================================
+
+enable
+configure terminal
+
+hostname CORE-2
+no ip domain-lookup
+ip domain name data.com
+
+! ============================================================
+! ===== Step 1: Enable IP routing =====
+! ============================================================
+ip routing
+
+! ============================================================
+! ===== Step 2: VTP and VLANs =====
+! ============================================================
+vtp version 2
+vtp mode transparent
+vtp domain-name data.com
+
+vlan 11
+ name DATA_GF
+vlan 12
+ name DATA_F2
+vlan 13
+ name DATA_F3
+vlan 14
+ name DATA_F4
+vlan 15
+ name DATA_F5
+vlan 21
+ name VOICE_GF
+vlan 22
+ name VOICE_F2
+vlan 23
+ name VOICE_F3
+vlan 24
+ name VOICE_F4
+vlan 25
+ name VOICE_F5
+vlan 30
+ name SERVERS
+vlan 40
+ name MGMT
+vlan 50
+ name PRINTERS
+vlan 60
+ name WIFI_CORP
+vlan 70
+ name WIFI_GUEST
+vlan 100
+ name NATIVE
+exit
+
+! ============================================================
+! ===== Step 3: Interfaces =====
+! ============================================================
+
+interface loopback 0
+ description Router-id
+ ip address 10.99.0.53 255.255.255.255
+exit
+
+interface f0/1
+ description Link to EDGE-RTR G0/1
+ no switchport
+ ip address 10.99.0.6 255.255.255.252
+ ip ospf network point-to-point
+ no shutdown
+exit
+
+interface range g0/1 - 2
+ description Routed link to CORE-1 (Po1 members)
+ no switchport
+ channel-group 1 mode active
+ no shutdown
+exit
+
+interface port-channel 1
+ description Routed L3 EtherChannel to CORE-1
+ no switchport
+ ip address 10.99.0.10 255.255.255.252
+ ip ospf network point-to-point
+exit
+
+interface range f0/2 - 5
+ description Trunk to ACC-GF-1..4 (their G0/2)
+ switchport trunk encapsulation dot1q
+ switchport mode trunk
+ switchport nonegotiate
+ switchport trunk native vlan 100
+ switchport trunk allowed vlan 11,21,30,40,50,60,70,100
+ no shutdown
+exit
+
+interface range f0/6 - 9
+ description Trunk to ACC-F2-1..4 (their G0/2)
+ switchport trunk encapsulation dot1q
+ switchport mode trunk
+ switchport nonegotiate
+ switchport trunk native vlan 100
+ switchport trunk allowed vlan 12,22,40,50,60,70,100
+ no shutdown
+exit
+
+interface range f0/10 - 13
+ description Trunk to ACC-F3-1..4 (their G0/2)
+ switchport trunk encapsulation dot1q
+ switchport mode trunk
+ switchport nonegotiate
+ switchport trunk native vlan 100
+ switchport trunk allowed vlan 13,23,40,50,60,70,100
+ no shutdown
+exit
+
+interface range f0/14 - 17
+ description Trunk to ACC-F4-1..4 (their G0/2)
+ switchport trunk encapsulation dot1q
+ switchport mode trunk
+ switchport nonegotiate
+ switchport trunk native vlan 100
+ switchport trunk allowed vlan 14,24,40,50,60,70,100
+ no shutdown
+exit
+
+interface range f0/18 - 21
+ description Trunk to ACC-F5-1..4 (their G0/2)
+ switchport trunk encapsulation dot1q
+ switchport mode trunk
+ switchport nonegotiate
+ switchport trunk native vlan 100
+ switchport trunk allowed vlan 15,25,40,50,60,70,100
+ no shutdown
+exit
+
+interface range f0/22 - 24
+ description Unused — shutdown
+ shutdown
+exit
+
+! ============================================================
+! ===== Step 4: SVIs with HSRP (mirror of CORE-1) =====
+! ============================================================
+
+interface vlan 11
+ description DATA_GF — Core-2 standby (ODD)
+ ip address 10.1.11.3 255.255.255.0
+ ip helper-address 10.10.30.20
+ standby version 2
+ standby 11 ip 10.1.11.1
+ no shutdown
+exit
+
+interface vlan 12
+ description DATA_F2 — Core-2 active (EVEN)
+ ip address 10.1.12.3 255.255.255.0
+ ip helper-address 10.10.30.20
+ standby version 2
+ standby 12 ip 10.1.12.1
+ standby 12 priority 110
+ standby 12 preempt
+ no shutdown
+exit
+
+interface vlan 13
+ description DATA_F3 — Core-2 standby (ODD)
+ ip address 10.1.13.3 255.255.255.0
+ ip helper-address 10.10.30.20
+ standby version 2
+ standby 13 ip 10.1.13.1
+ no shutdown
+exit
+
+interface vlan 14
+ description DATA_F4 — Core-2 active (EVEN)
+ ip address 10.1.14.3 255.255.255.0
+ ip helper-address 10.10.30.20
+ standby version 2
+ standby 14 ip 10.1.14.1
+ standby 14 priority 110
+ standby 14 preempt
+ no shutdown
+exit
+
+interface vlan 15
+ description DATA_F5 — Core-2 standby (ODD)
+ ip address 10.1.15.3 255.255.255.0
+ ip helper-address 10.10.30.20
+ standby version 2
+ standby 15 ip 10.1.15.1
+ no shutdown
+exit
+
+interface vlan 21
+ description VOICE_GF — Core-2 standby (ODD)
+ ip address 10.2.21.3 255.255.255.0
+ ip helper-address 10.10.30.20
+ standby version 2
+ standby 21 ip 10.2.21.1
+ no shutdown
+exit
+
+interface vlan 22
+ description VOICE_F2 — Core-2 active (EVEN)
+ ip address 10.2.22.3 255.255.255.0
+ ip helper-address 10.10.30.20
+ standby version 2
+ standby 22 ip 10.2.22.1
+ standby 22 priority 110
+ standby 22 preempt
+ no shutdown
+exit
+
+interface vlan 23
+ description VOICE_F3 — Core-2 standby (ODD)
+ ip address 10.2.23.3 255.255.255.0
+ ip helper-address 10.10.30.20
+ standby version 2
+ standby 23 ip 10.2.23.1
+ no shutdown
+exit
+
+interface vlan 24
+ description VOICE_F4 — Core-2 active (EVEN)
+ ip address 10.2.24.3 255.255.255.0
+ ip helper-address 10.10.30.20
+ standby version 2
+ standby 24 ip 10.2.24.1
+ standby 24 priority 110
+ standby 24 preempt
+ no shutdown
+exit
+
+interface vlan 25
+ description VOICE_F5 — Core-2 standby (ODD)
+ ip address 10.2.25.3 255.255.255.0
+ ip helper-address 10.10.30.20
+ standby version 2
+ standby 25 ip 10.2.25.1
+ no shutdown
+exit
+
+interface vlan 30
+ description SERVERS — Core-2 standby
+ ip address 10.10.30.3 255.255.255.192
+ standby version 2
+ standby 30 ip 10.10.30.1
+ no shutdown
+exit
+
+interface vlan 40
+ description MGMT — Core-2 standby
+ ip address 10.10.40.3 255.255.255.192
+ standby version 2
+ standby 40 ip 10.10.40.1
+ no shutdown
+exit
+
+interface vlan 50
+ description PRINTERS — Core-2 standby
+ ip address 10.10.50.3 255.255.255.224
+ ip helper-address 10.10.30.20
+ standby version 2
+ standby 50 ip 10.10.50.1
+ no shutdown
+exit
+
+interface vlan 60
+ description WIFI_CORP — Core-2 standby
+ ip address 10.20.60.3 255.255.254.0
+ ip helper-address 10.10.30.20
+ standby version 2
+ standby 60 ip 10.20.60.1
+ no shutdown
+exit
+
+interface vlan 70
+ description WIFI_GUEST — Core-2 standby
+ ip address 10.20.70.3 255.255.255.0
+ ip helper-address 10.10.30.20
+ standby version 2
+ standby 70 ip 10.20.70.1
+ no shutdown
+exit
+
+! ============================================================
+! ===== Step 5: OSPF =====
+! ============================================================
+router ospf 1
+ router-id 10.99.0.53
+ passive-interface loopback 0
+ passive-interface vlan 11
+ passive-interface vlan 12
+ passive-interface vlan 13
+ passive-interface vlan 14
+ passive-interface vlan 15
+ passive-interface vlan 21
+ passive-interface vlan 22
+ passive-interface vlan 23
+ passive-interface vlan 24
+ passive-interface vlan 25
+ passive-interface vlan 30
+ passive-interface vlan 40
+ passive-interface vlan 50
+ passive-interface vlan 60
+ passive-interface vlan 70
+ network 10.99.0.53 0.0.0.0 area 0
+ network 10.99.0.6 0.0.0.0 area 0
+ network 10.99.0.10 0.0.0.0 area 0
+ network 10.1.11.3 0.0.0.0 area 0
+ network 10.1.12.3 0.0.0.0 area 0
+ network 10.1.13.3 0.0.0.0 area 0
+ network 10.1.14.3 0.0.0.0 area 0
+ network 10.1.15.3 0.0.0.0 area 0
+ network 10.2.21.3 0.0.0.0 area 0
+ network 10.2.22.3 0.0.0.0 area 0
+ network 10.2.23.3 0.0.0.0 area 0
+ network 10.2.24.3 0.0.0.0 area 0
+ network 10.2.25.3 0.0.0.0 area 0
+ network 10.10.30.3 0.0.0.0 area 0
+ network 10.10.40.3 0.0.0.0 area 0
+ network 10.10.50.3 0.0.0.0 area 0
+ network 10.20.60.3 0.0.0.0 area 0
+ network 10.20.70.3 0.0.0.0 area 0
+exit
+
+! ============================================================
+! ===== Step 6: Spanning Tree =====
+! ============================================================
+spanning-tree mode rapid-pvst
+spanning-tree vlan 12,14,22,24 priority 0
+spanning-tree vlan 11,13,15,21,23,25,30,40,50,60,70,100 priority 4096
+
+! ============================================================
+! ===== Step 7: Logging, NTP, DNS =====
+! ============================================================
+ip name-server 10.10.30.10
+
+logging 10.10.30.10
+logging trap debugging
+logging buffered 8192
+
+ntp authentication-key 1 md5 ccna
+ntp trusted-key 1
+ntp server 10.10.30.20 key 1
+
+no cdp run
+lldp run
+
+! ============================================================
+! ===== Step 8: Auth, SSH, VTY ACL (final hardening) =====
+! ============================================================
+service password-encryption
+enable secret password
+username password privilege 15 secret password
+
+access-list 1 permit 10.10.40.0 0.0.0.63
+access-list 1 deny   any
+
+crypto key generate rsa
+512
+ip ssh version 2
+ip ssh time-out 60
+ip ssh authentication-retries 3
+
+line console 0
+ login local
+ logging synchronous
+ exec-timeout 10 0
+exit
+
+line vty 0 15
+ login local
+ transport input ssh
+ access-class 1 in
+ exec-timeout 10 0
+exit
+
+end
+write memory
